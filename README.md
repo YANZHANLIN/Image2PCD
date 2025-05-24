@@ -26,7 +26,7 @@ A powerful tool for converting images into 3D point clouds and creating stunning
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/Image2PCD.git
+git clone https://github.com/YANZHANLIN/Image2PCD.git
 cd Image2PCD
 ```
 
