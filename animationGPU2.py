@@ -110,12 +110,28 @@ def create_gpu_point_cloud_animation(x, y, z_frames, color_frames, output_filena
     max_size = np.max(size)
     camera_distance = max_size * 2.0  # Adjust this multiplier to change zoom level
     
-    # Set initial camera angle with Z as vertical
-    ctr.set_zoom(0.7)
-    ctr.set_front([1, 0, 0])     # Looking along X axis
-    ctr.set_lookat(center)       # Look at the center of the point cloud
-    ctr.set_up([0, 0, 1])        # Z is up
-    ctr.rotate(180, 45)          # Lower elevation angle for better view
+    # Set custom camera view from saved parameters
+    # Create camera parameters from your saved extrinsic matrix
+    camera_params = o3d.camera.PinholeCameraParameters()
+    
+    # Set intrinsic parameters
+    camera_params.intrinsic = o3d.camera.PinholeCameraIntrinsic(
+        width=1920, height=1080,
+        fx=918.85295342, fy=918.85295342,
+        cx=959.5, cy=530.0
+    )
+    
+    # Set extrinsic parameters from your saved camera position
+    extrinsic = np.array([
+        [-9.98656078e-01,  2.05147318e-03, -5.17863744e-02,  6.71704549e+02],
+        [ 9.61813989e-03,  9.89194765e-01, -1.46291518e-01, -7.97381191e+02],
+        [ 5.09266974e-02, -1.46593002e-01, -9.87885096e-01,  1.86881693e+03],
+        [ 0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  1.00000000e+00]
+    ])
+    camera_params.extrinsic = extrinsic
+    
+    # Apply the saved camera parameters
+    ctr.convert_from_pinhole_camera_parameters(camera_params, allow_arbitrary=True)
     
     print("Rendering frames...")
     frames = []
@@ -188,6 +204,7 @@ def create_interactive_gpu_viewer(x, y, z_frames, color_frames, sample_rate=None
     print("- Mouse: Rotate view")
     print("- Mouse wheel: Zoom")
     print("- Arrow keys: Navigate frames")
+    print("- S key: Save current camera parameters")
     print("- ESC: Exit")
     
     # Create visualizer
@@ -221,6 +238,50 @@ def create_interactive_gpu_viewer(x, y, z_frames, color_frames, sample_rate=None
             update_frame()
         return False
     
+    def save_camera_params(vis):
+        """Save current camera parameters when 'S' is pressed"""
+        ctr = vis.get_view_control()
+        camera_params = ctr.convert_to_pinhole_camera_parameters()
+        
+        # Get camera position and orientation
+        extrinsic = camera_params.extrinsic
+        intrinsic = camera_params.intrinsic
+        
+        print("\n" + "="*50)
+        print("CAMERA PARAMETERS SAVED!")
+        print("="*50)
+        print(f"Camera intrinsic matrix:")
+        print(intrinsic.intrinsic_matrix)
+        print(f"\nCamera extrinsic matrix:")
+        print(extrinsic)
+        
+        # Extract more readable parameters
+        import scipy.spatial.transform as R
+        rotation_matrix = extrinsic[:3, :3]
+        translation = extrinsic[:3, 3]
+        
+        # Convert rotation matrix to Euler angles
+        rotation = R.Rotation.from_matrix(rotation_matrix)
+        euler_angles = rotation.as_euler('xyz', degrees=True)
+        
+        print(f"\nReadable camera parameters:")
+        print(f"Position (translation): {translation}")
+        print(f"Rotation (Euler XYZ degrees): {euler_angles}")
+        
+        # Save to file for easy copying
+        with open('camera_params.txt', 'w') as f:
+            f.write("# Camera Parameters\n")
+            f.write(f"# Position: {translation}\n")
+            f.write(f"# Rotation (Euler XYZ degrees): {euler_angles}\n")
+            f.write(f"# Extrinsic matrix:\n")
+            f.write(f"{extrinsic}\n")
+            f.write(f"# Intrinsic matrix:\n")
+            f.write(f"{intrinsic.intrinsic_matrix}\n")
+        
+        print(f"Camera parameters saved to 'camera_params.txt'")
+        print("="*50)
+        return False
+    
     def update_frame():
         frame_idx = current_frame[0]
         points_3d = np.column_stack((x_sample, y_sample, z_sample[frame_idx]))
@@ -232,6 +293,7 @@ def create_interactive_gpu_viewer(x, y, z_frames, color_frames, sample_rate=None
     # Register key callbacks
     vis.register_key_callback(262, next_frame)  # Right arrow
     vis.register_key_callback(263, prev_frame)  # Left arrow
+    vis.register_key_callback(83, save_camera_params)   # 'S' key
     
     vis.reset_view_point(True)
     vis.run()
